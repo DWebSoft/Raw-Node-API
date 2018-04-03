@@ -7,8 +7,10 @@ var http = require('http');
 var https = require('https');
 var url = require('url');
 var StringDecoder = require('string_decoder').StringDecoder;
-var config = require('./config');
+var config = require('./lib/config');
 var fs = require('fs');
+var handlers = require('./lib/handlers');
+var helpers = require('./lib/helpers');
 
 //Instanstiate a http server
 var httpServer = http.createServer( function (req, res) {
@@ -49,23 +51,23 @@ var unifiedServer = function(req, res) {
     var queryStringObject = parsedUrl.query;
 
     //Get Requested Method
-    var method = req.method.toUpperCase();
+    var method = req.method.toLowerCase();
 
     //Get Headers
     var headers = req.headers;
 
     //Get Payload
-    var payload = '';
+    var buffer = '';
     var decoder = new StringDecoder('utf-8');
 
     //Payload comes as a Stream. So grab it in parts and combine
     req.on('data', (data) => {
-        payload += decoder.write(data);
+        buffer += decoder.write(data);
 
     });
 
     req.on('end', () => {
-        payload += decoder.end();
+        buffer += decoder.end();
 
         //Choose the handler this request should go to
         var chooseHandler = typeof (router[resource]) !== 'undefined' ? router[resource] : handlers.notFound;
@@ -76,19 +78,19 @@ var unifiedServer = function(req, res) {
             queryStringObject,
             method,
             headers,
-            payload
+            payload: helpers.parseJsonToObject(buffer)
         };
 
         //Route the request to the specific handler
-        chooseHandler(data, (statusCode, resPayload) => {
+        chooseHandler(data, (statusCode, payload) => {
 
             //Set default status code
             statusCode = typeof (statusCode) == 'number' ? statusCode : 200;
 
             //Set default payload object
-            resPayload = typeof (resPayload) == 'object' ? resPayload : {};
+            payload = typeof (payload) == 'object' ? payload : {};
 
-            var payloadString = JSON.stringify(resPayload);
+            var payloadString = JSON.stringify(payload);
 
             res.setHeader('Content-Type', 'application/json');
             res.writeHead(statusCode);
@@ -97,21 +99,8 @@ var unifiedServer = function(req, res) {
     });
 }
 
-
-//Request Handlers
-var handlers = {};
-
-//Ping handler
-handlers.ping = function(data,callback){
-    callback(200);
-}
-
-//Not found handler
-handlers.notFound = function(data, callback){
-    callback(404);
-}
-
 //Define request router
 var router = {
-    ping : handlers.ping
+    ping : handlers.ping,
+    users : handlers.users
 }
